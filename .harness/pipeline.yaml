@@ -1,0 +1,207 @@
+pipeline:
+  name: cd-tidbits-policy-as-code
+  identifier: cdtidbitspolicyascode
+  projectIdentifier: <YOUR_PROJECT_ID>
+  orgIdentifier: <YOUR_ORG_ID>
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: <YOUR_GITHUB_CONNECTOR>
+        repoName: cd-tidbit-policy-as-code
+        build: <+input>
+        sparseCheckout: []
+  stages:
+    - stage:
+        name: Build
+        identifier: Build
+        description: ""
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: false
+            override: false
+            paths: []
+          buildIntelligence:
+            enabled: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build And Push Docker Registry
+                  identifier: Build_And_Push_Docker_Registry
+                  spec:
+                    connectorRef: <YOUR_DOCKER_CONNECTOR>
+                    repo: <YOUR_DOCKERHUB_USERNAME>/<YOUR_REPO_NAME>
+                    tags:
+                      - <+pipeline.variables.image_tag>
+                    caching: false
+    - stage:
+        name: Deploy to Staging
+        identifier: Deploy_to_Staging
+        description: ""
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: appservice
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      sources:
+                        - identifier: appartifact
+                          type: DockerRegistry
+                          spec:
+                            tag: <+pipeline.sequenceId>
+          environment:
+            environmentRef: Staging
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: stagingInfra
+          execution:
+            steps:
+              - step:
+                  type: HarnessApproval
+                  name: HarnessApproval
+                  identifier: HarnessApproval
+                  spec:
+                    approvalMessage: Please review the following information and approve the pipeline progression
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      userGroups:
+                        - _project_all_users
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                    approverInputs: []
+                  timeout: 1d
+              - step:
+                  type: ShellScript
+                  name: Create Namespace
+                  identifier: Create_Namespace
+                  spec:
+                    shell: Bash
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          kubectl get namespace <+infra.namespace> || kubectl create namespace <+infra.namespace>
+                    onDelegate: true
+                  timeout: 1m
+              - step:
+                  name: Rollout Deployment
+                  identifier: rolloutDeployment
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+            rollbackSteps:
+              - step:
+                  name: Rollback Rollout Deployment
+                  identifier: rollbackRolloutDeployment
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec:
+                    pruningEnabled: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        name: Deploy to Production
+        identifier: Deploy_to_Production
+        description: ""
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: appservice
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      sources:
+                        - identifier: appartifact
+                          type: DockerRegistry
+                          spec:
+                            tag: <+pipeline.sequenceId>
+          environment:
+            environmentRef: production
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: prodinfra
+          execution:
+            steps:
+              - step:
+                  type: HarnessApproval
+                  name: HarnessApproval
+                  identifier: HarnessApproval
+                  spec:
+                    approvalMessage: Please review the following information and approve the pipeline progression
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      userGroups:
+                        - _project_all_users
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                    approverInputs: []
+                  timeout: 1d
+              - step:
+                  type: ShellScript
+                  name: Create Namespace
+                  identifier: Create_Namespace
+                  spec:
+                    shell: Bash
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          kubectl get namespace <+infra.namespace> || kubectl create namespace <+infra.namespace>
+                    onDelegate: true
+                  timeout: 1m
+              - step:
+                  name: Rollout Deployment
+                  identifier: rolloutDeployment
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+            rollbackSteps:
+              - step:
+                  name: Rollback Rollout Deployment
+                  identifier: rollbackRolloutDeployment
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec:
+                    pruningEnabled: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+  variables:
+    - name: image_tag
+      type: String
+      description: ""
+      required: false
+      value: <+pipeline.sequenceId>

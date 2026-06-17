@@ -1,0 +1,38 @@
+service:
+  name: app-service
+  identifier: appservice
+  projectIdentifier: <YOUR_PROJECT_ID>
+  orgIdentifier: <YOUR_ORG_ID>
+  serviceDefinition:
+    spec:
+      manifests:
+        - manifest:
+            identifier: appmanifest
+            type: K8sManifest
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: <YOUR_GITHUB_CONNECTOR>
+                  gitFetchType: Branch
+                  paths:
+                    - k8s/deployment.yaml
+                    - k8s/deployment.yaml
+                  repoName: cd-tidbit-policy-as-code
+                  branch: main
+              valuesPaths:
+                - k8s/values.yaml
+              skipResourceVersioning: false
+              enableDeclarativeRollback: false
+      artifacts:
+        primary:
+          primaryArtifactRef: appartifact
+          sources:
+            - spec:
+                connectorRef: <YOUR_DOCKER_CONNECTOR>
+                imagePath: <YOUR_DOCKERHUB_USERNAME>/<YOUR_REPO_NAME>
+                tag: <+input>
+                digest: ""
+              identifier: appartifact
+              type: DockerRegistry
+    type: Kubernetes
