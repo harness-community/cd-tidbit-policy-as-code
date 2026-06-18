@@ -17,7 +17,7 @@ service:
                   gitFetchType: Branch
                   paths:
                     - k8s/deployment.yaml
-                    - k8s/deployment.yaml
+                    - k8s/service.yaml
                   repoName: cd-tidbit-policy-as-code
                   branch: main
               valuesPaths:
